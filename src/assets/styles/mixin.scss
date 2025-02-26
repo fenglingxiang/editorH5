@@ -1,0 +1,68 @@
+//定义通用的 `css-animation`
+@mixin clearfix {
+	&::after {
+		display: table;
+		clear: both;
+		content: "";
+	}
+}
+
+@mixin scrollBar {
+	&::-webkit-scrollbar-track-piece {
+		background: #d3dce6;
+	}
+
+	&::-webkit-scrollbar {
+		width: 0;
+	}
+
+	&::-webkit-scrollbar-thumb {
+		border-radius: 20px;
+		background: $main;
+	}
+}
+
+@mixin relative {
+	position: relative;
+	width: 100%;
+	height: 100%;
+}
+
+//多行显示省略号
+@mixin ellipsis-n($line: 2) {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: $line;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: normal;
+}
+
+$margins: (
+	"t": "margin-top",
+	"r": "margin-right",
+	"b": "margin-bottom",
+	"l": "margin-left"
+);
+$paddings: (
+	"t": "padding-top",
+	"r": "padding-right",
+	"b": "padding-bottom",
+	"l": "padding-left",
+);
+
+@mixin getMargin($num) {
+	@each $name, $value in $margins {
+		.m#{$name}-#{$num} {
+			#{$value}: $num + px!important;
+		}
+	}
+}
+
+@mixin getPadding($num) {
+	@each $name, $value in $paddings {
+		.p#{$name}-#{$num} {
+			#{$value}: $num + px!important;
+		}
+	}
+}
