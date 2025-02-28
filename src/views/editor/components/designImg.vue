@@ -32,8 +32,10 @@
     </div>
     <bottom-box @getBottomBoxH="getBottomBoxH">
       <div class="bg-white" v-if="!isEdit">
+        <!-- 编辑图片tool -->
         <div
           class="img-tools flex align-center justify-center pl-10 pr-10 pt-10 pb-10"
+          v-show="bottomToolsMode === 'img'"
         >
           <van-uploader
             :before-read="beforeRead"
@@ -59,6 +61,12 @@
             </div>
           </van-uploader>
         </div>
+        <!-- 边框 -->
+        <border-tools
+          v-show="bottomToolsMode === 'border'"
+          @changeBorder="paintBorder"
+          @clearBorder="clearBorder"
+        />
         <div class="bottom-tools flex align-ceneter justify-center">
           <div
             :class="[
@@ -101,39 +109,36 @@
     <not-fill-dialog v-model:show="isShowNotFillDialog" @toFill="toFill" />
 
     <!-- 退出编辑提示 -->
-    <exitDialog v-model:show="isShowExitDialog" @exit="editExit" />
+    <exit-dialog v-model:show="isShowExitDialog" @exit="editExit" />
   </div>
 </template>
 
 <script setup>
-import { ref, shallowRef, onMounted } from "vue";
-import { Canvas, Circle, Polygon } from "fabric";
+import { ref, shallowRef } from "vue";
+import { Canvas, Circle } from "fabric";
 import * as fabric from "fabric";
-import { loadFabricImage, renderControlIcon } from "@/utils/util";
-import bottomBox from "@/components/bottomBox/index.vue";
+import {
+  loadFabricImage,
+  initImgOptions,
+  renderControlIcon,
+} from "@/utils/fabricUtil";
 import notFillDialog from "./notFillDialog.vue";
-import exitDialog from "./exitDialog.vue"
+import exitDialog from "./exitDialog.vue";
+import borderTools from "./borderTools.vue";
+import { getImgInfo } from "@/utils/util";
+
+const mainImgInfo = defineModel("mainImgInfo", {
+  type: Object,
+  default: () => {
+    return {};
+  },
+});
 
 const props = defineProps({
-  mainImgUrl: {
-    type: String,
-    default: "",
-  },
-
   maskUrl: {
     type: String,
     default: "/src/assets/images/editor-img-mask-red.png",
   },
-
-  // contentW: {
-  //   type: [Number, String],
-  //   default: 355,
-  // },
-
-  // contentH: {
-  //   type: [Number, String],
-  //   default: 507,
-  // },
 
   offsetTop: {
     type: [Number, String],
@@ -146,14 +151,17 @@ const props = defineProps({
   },
 });
 
-const emits = defineEmits(["getDesignBottomBoxH", "changeImgSuccess"]);
+const emits = defineEmits([
+  "getDesignBottomBoxH",
+  "changeImgSuccess",
+  "showUploadWhiteInk",
+]);
 
 const buttonRef = ref(null);
 const canvasBox = ref(null);
 const canvasRef = ref(null);
 const canvasSize = ref({});
 const canvas = shallowRef(null);
-const ctx = ref(null);
 const historyCanvasJsonData = ref("");
 const imgTools = ref([
   {
@@ -173,21 +181,22 @@ const bottomTools = ref([
     name: "编辑图片",
     type: "img",
   },
-  // {
-  //   icon: "border-icon",
-  //   name: "选择边框",
-  //   type: "border",
-  // },
-  // {
-  //   icon: "mask-icon",
-  //   name: "调整白墨",
-  //   type: "whiteInk",
-  // },
+  {
+    icon: "border-icon",
+    name: "选择边框",
+    type: "border",
+  },
+  {
+    icon: "mask-icon",
+    name: "调整白墨",
+    type: "whiteInk",
+  },
 ]);
 const bottomToolsMode = ref(bottomTools.value[0].type);
 const isEdit = ref(false);
-const isShowNotFillDialog = ref(false)
-const isShowExitDialog = ref(false)
+const isShowNotFillDialog = ref(false);
+const isShowExitDialog = ref(false);
+const disabledImgs = ["maskImg", "borderImg"]; //🈲操作的图层id
 
 const paintImg = async (src, options = {}, clipOptions) => {
   const { width } = canvas.value;
@@ -207,34 +216,14 @@ const paintImg = async (src, options = {}, clipOptions) => {
     ...options,
   });
   //缩放图片
-  initImgOptions(fabricImage);
+  initImgOptions(fabricImage, {
+    width: canvas.value.width,
+    offsetTop: props.offsetTop,
+  });
   // 自定义控制框
   customControls(fabricImage);
   fabricImage.setCoords();
   canvas.value.add(fabricImage);
-  return fabricImage;
-};
-
-const initImgOptions = (fabricImage) => {
-  const { width } = canvas.value;
-  const scaleRate =
-    fabricImage.width > fabricImage.height
-      ? width / fabricImage.height
-      : width / fabricImage.width;
-  let left = 0;
-  let top = 0;
-  if (fabricImage.width > fabricImage.height) {
-    left = (width - fabricImage.width * scaleRate) / 2;
-  } else {
-    top = (width - fabricImage.height * scaleRate) / 2;
-  }
-  fabricImage.set({
-    left,
-    top: top + props.offsetTop,
-    angle: 0
-  });
-  fabricImage.scale(scaleRate);
-  fabricImage.setCoords();
   return fabricImage;
 };
 
@@ -249,7 +238,7 @@ const reverseHandle = () => {
     flipX: !obj.flipX,
   });
   obj.setCoords();
-  canvas.value.renderAll();
+  canvas.value.requestRenderAll();
 };
 
 const init = async () => {
@@ -257,13 +246,12 @@ const init = async () => {
     preserveObjectStacking: true,
     selection: false,
   });
-  ctx.value = canvas.value.getContext("2d");
   canvas.value.setDimensions({
     width: canvasSize.value.w,
     height: canvasSize.value.h,
   });
   const mainImg = await paintImg(
-    props.mainImgUrl,
+    mainImgInfo.value.url,
     {
       selectable: false,
       id: "mainImg",
@@ -274,6 +262,7 @@ const init = async () => {
       type: "circle",
     }
   );
+  console.log("🚀 ~ init ~ mainImgInfo.value:", mainImgInfo.value);
   const maskImg = await paintImg(props.maskUrl, {
     left: 0,
     top: props.offsetTop,
@@ -284,7 +273,7 @@ const init = async () => {
   canvas.value.renderAll();
   canvas.value.on("mouse:up", (e) => {
     let flag = maskImg.containsPoint(e.pointer); //判断点击点是否在maskImg内部
-    if (!isEdit.value && flag) {
+    if (!isEdit.value && flag && bottomToolsMode.value === "img") {
       editStart();
     }
   });
@@ -344,6 +333,9 @@ const getBottomBoxH = (e) => {
 
 const bottomToolToggle = (e) => {
   bottomToolsMode.value = e;
+  if (e === "whiteInk") {
+    emits("showUploadWhiteInk");
+  }
 };
 
 const toolHandle = (e) => {
@@ -361,17 +353,17 @@ const editStart = () => {
   historyCanvasJsonData.value = canvas.value.toObject(["id"]);
   isEdit.value = true;
   canvas.value.forEachObject((obj) => {
-    obj.selectable = obj.id !== "maskImg";
-    obj.evented = obj.id !== "maskImg";
+    obj.selectable = !disabledImgs.includes(obj.id);
+    obj.evented = !disabledImgs.includes(obj.id);
     if (obj.id === "mainImg") {
       canvas.value.setActiveObject(obj);
-      canvas.value.renderAll();
+      canvas.value.requestRenderAll();
     }
   });
 };
 
 const beforeRead = (file) => {
-  console.log("🚀 ~ beforeRead ~ file:", file)
+  console.log("🚀 ~ beforeRead ~ file:", file);
   if (props.accept.indexOf(file.type) === -1) {
     showToast("图片格式不支持");
     return false;
@@ -382,9 +374,14 @@ const beforeRead = (file) => {
 const changeImgSuccess = (e) => {
   canvas.value.forEachObject(async (obj) => {
     if (obj.id === "mainImg") {
+      console.log("🚀 ~ canvas.value.forEachObject ~ obj:", obj);
       await obj.setSrc(e.objectUrl);
-      initImgOptions(obj);
-      canvas.value.renderAll();
+      initImgOptions(obj, {
+        width: canvas.value.width,
+        offsetTop: props.offsetTop,
+      });
+      canvas.value.requestRenderAll();
+      mainImgInfo.value = await getImgInfo(e.objectUrl);
     }
   });
 };
@@ -393,9 +390,9 @@ const changeImgSuccess = (e) => {
 const editFinish = async () => {
   const flag = await isFill();
   //图片未撑满
-  if(!flag) {
-    isShowNotFillDialog.value = true
-    return
+  if (!flag) {
+    isShowNotFillDialog.value = true;
+    return;
   }
   isEdit.value = false;
   canvas.value.forEachObject((obj) => {
@@ -403,9 +400,8 @@ const editFinish = async () => {
       selectable: false,
     });
   });
-  ctx.value = canvas.value.getContext("2d");
   canvas.value.discardActiveObject();
-  canvas.value.renderAll();
+  canvas.value.requestRenderAll();
 };
 
 //判断裁剪区是否填满图案
@@ -414,7 +410,10 @@ const isFill = () => {
     canvas.value.forEachObject((obj) => {
       if (obj.id === "mainImg") {
         const { tl, tr, bl, br } = obj.aCoords;
-        console.log("🚀 ~ canvas.value.forEachObject ~ obj.aCoords:", obj.aCoords)
+        console.log(
+          "🚀 ~ canvas.value.forEachObject ~ obj.aCoords:",
+          obj.aCoords
+        );
         const { left, top, width, height } = obj.clipPath;
         const clipPathPoints = {
           ctl: { x: left, y: top },
@@ -423,16 +422,19 @@ const isFill = () => {
           cbr: { x: left + width, y: top + height },
         };
         const { ctl, ctr, cbl, cbr } = clipPathPoints;
-        console.log("🚀 ~ canvas.value.forEachObject ~ clipPathPoints:", clipPathPoints)
+        console.log(
+          "🚀 ~ canvas.value.forEachObject ~ clipPathPoints:",
+          clipPathPoints
+        );
 
         const isTlIn = ctl.x >= Math.round(tl.x) && ctl.y >= Math.round(tl.y); //左上角是否被包含
-        console.log("🚀 ~ canvas.value.forEachObject ~ isTlIn:", isTlIn)
+        console.log("🚀 ~ canvas.value.forEachObject ~ isTlIn:", isTlIn);
         const isTrIn = ctr.x <= Math.round(tr.x) && ctr.y >= Math.round(tr.y); //右上角是否被包含
-        console.log("🚀 ~ canvas.value.forEachObject ~ isTrIn:", isTrIn)
+        console.log("🚀 ~ canvas.value.forEachObject ~ isTrIn:", isTrIn);
         const isBrIn = cbr.x <= Math.round(br.x) && cbr.y <= Math.round(br.y); //右下角是否被包含
-        console.log("🚀 ~ canvas.value.forEachObject ~ isBrIn:", isBrIn)
+        console.log("🚀 ~ canvas.value.forEachObject ~ isBrIn:", isBrIn);
         const isBlIn = cbl.x >= Math.round(bl.x) && cbl.y <= Math.round(bl.y); //左下角是否被包含
-        console.log("🚀 ~ canvas.value.forEachObject ~ isBlIn:", isBlIn)
+        console.log("🚀 ~ canvas.value.forEachObject ~ isBlIn:", isBlIn);
         resolve(isTlIn && isTrIn && isBrIn && isBlIn);
       }
     });
@@ -440,14 +442,17 @@ const isFill = () => {
 };
 
 const toFill = () => {
-  canvas.value.forEachObject(obj => {
-    if(obj.id === "mainImg") {
-      initImgOptions(obj)
-      canvas.value.renderAll();
-      isShowNotFillDialog.value = false
+  canvas.value.forEachObject((obj) => {
+    if (obj.id === "mainImg") {
+      initImgOptions(obj, {
+        width: canvas.value.width,
+        offsetTop: props.offsetTop,
+      });
+      canvas.value.requestRenderAll();
+      isShowNotFillDialog.value = false;
     }
-  })
-}
+  });
+};
 
 //退出编辑
 const editExit = async () => {
@@ -458,11 +463,54 @@ const editExit = async () => {
         selectable: false,
         evented: false,
       });
+      if (ins.id === "mainImg") {
+        mainImgInfo.value = {
+          url: obj.src,
+          w: obj.width,
+          h: obj.height,
+        };
+      }
     }
   );
-  canvas.value.renderAll();
-  isShowExitDialog.value = false
+  canvas.value.requestRenderAll();
   isEdit.value = false;
+};
+
+//绘制边框图片
+const paintBorder = async (e) => {
+  const borderImg = await paintImg(e.img, {
+    left: 0,
+    top: props.offsetTop,
+    selectable: false,
+    evented: false,
+    id: "borderImg",
+  });
+  moveDownOneLayer(borderImg);
+};
+
+//清除边框图片
+const clearBorder = () => {
+  canvas.value.forEachObject((obj) => {
+    if (obj.id === "borderImg") {
+      canvas.value.remove(obj);
+      canvas.value.requestRenderAll();
+    }
+  });
+};
+
+const moveDownOneLayer = (target) => {
+  const objects = canvas.value.getObjects();
+  const currentIndex = objects.indexOf(target);
+
+  if (currentIndex > 0) {
+    // 直接交换两个对象的位置
+    canvas.value.moveObjectTo(objects[currentIndex - 1], currentIndex);
+    canvas.value.moveObjectTo(target, currentIndex - 1);
+
+    // 更高效的渲染方式
+    canvas.value.discardActiveObject();
+    canvas.value.requestRenderAll();
+  }
 };
 
 const saveImg = () => {
@@ -487,7 +535,7 @@ const saveImg = () => {
     };
   }
   const res = canvas.value.toDataURL({ ...options });
-  console.log("🚀 ~ saveImg ~ res:", res)
+  console.log("🚀 ~ saveImg ~ res:", res);
 };
 </script>
 

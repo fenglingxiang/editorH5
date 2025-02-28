@@ -1,6 +1,8 @@
 :root:root {
   /* common */
   --com-red-color: #FC0606;
+  --com-blue-color: #4381FF;
+  --com-grey-color: #858383;
 
   --van-font-bold: 700;
   /* nav-bar */
@@ -18,4 +20,8 @@
 
   --van-button-radius: 2px;
   /* --van-button-border-width: 0; */
+}
+
+.van-button--default {
+  border-color: transparent!important;
 }
