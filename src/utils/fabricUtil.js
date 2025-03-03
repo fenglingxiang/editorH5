@@ -1,4 +1,4 @@
-import { FabricImage, Control } from "fabric"
+import { FabricImage, Control, filters } from "fabric"
 import * as fabric from "fabric"
 
 /** 加载fabric图片 */
@@ -16,8 +16,9 @@ export const loadFabricImage = async (
     },
   );
 
-export const initImgOptions = (fabricImage, options = {}) => {
-  const { width, offsetTop } = options
+export const initImgOptions = (fabricImage, defaults = {}, options = {}) => {
+  const { width, offsetTop } = defaults
+  console.log("🚀 ~ initImgOptions ~ offsetTop:", offsetTop)
   const scaleRate =
     fabricImage.width > fabricImage.height
       ? width / fabricImage.height
@@ -33,8 +34,11 @@ export const initImgOptions = (fabricImage, options = {}) => {
     left,
     top: top + offsetTop,
     angle: 0,
+    scaleX: scaleRate,
+    scaleY: scaleRate,
+    ...options
   });
-  fabricImage.scale(scaleRate);
+  // fabricImage.scale(scaleRate);
   fabricImage.setCoords();
   return fabricImage;
 };
@@ -64,6 +68,39 @@ export const renderControlIcon = (fabricImage, icon, controlKey, options = {}) =
     });
   }
 }
+
+export const imgFiltersBlack = async (fabricImage) => {
+  const matrix = [
+    0,
+    0,
+    0,
+    0,
+    0, // R
+    0,
+    0,
+    0,
+    0,
+    0, // G
+    0,
+    0,
+    0,
+    0,
+    0, // B
+    0,
+    0,
+    0,
+    1,
+    0, // A
+  ];
+  const colorMatrix = new filters.ColorMatrix({
+    matrix,
+  });
+  // const brightness = new filters.Brightness({
+  //   brightness: -1,
+  // });
+  fabricImage.filters.push(colorMatrix);
+  fabricImage.applyFilters();
+};
 
 const renderIcon = (ctx, left, top, _styleOverride, fabricObject, img, size) => {
   ctx.save();

@@ -84,12 +84,14 @@
 }
 
 //内边距
+@include getPadding(4);
 @include getPadding(10);
 @include getPadding(12);
 @include getPadding(14);
 
 //外边距
 @include getMargin(2);
+@include getMargin(4);
 @include getMargin(3);
 @include getMargin(6);
 @include getMargin(8);
@@ -99,6 +101,11 @@
 @include getMargin(17);
 @include getMargin(20);
 @include getMargin(30);
+
+.fs-10 {
+  font-size: 10px;
+  line-height: 10px;
+}
 
 .fs-12 {
   font-size: 12px;

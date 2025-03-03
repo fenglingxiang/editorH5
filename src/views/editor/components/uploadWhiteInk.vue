@@ -10,7 +10,20 @@
         >退出</van-button
       >
     </div>
-    <canvas ref="canvasRef" v-if="isUplaodSuccess"></canvas>
+    <div class="relative" v-if="isShowCanvas">
+      <canvas ref="canvasRef"></canvas>
+      <van-button
+        icon="/src/assets/images/clear2-icon.png"
+        class="absolute"
+        :style="{
+          top: clipPath.h + offsetTop + 20 + 'px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+        }"
+        @click="clear"
+        >清空白墨层</van-button
+      >
+    </div>
     <upload
       :beforeRead="beforeRead"
       :size="uploadW"
@@ -23,7 +36,23 @@
       v-else
     />
     <bottom-box @getBottomBoxH="getBottomBoxH">
-      <div class="bg-white flex align-center justify-between p-10">
+      <div
+        class="bg-white flex align-center justify-between p-10"
+        v-if="isShowCanvas"
+      >
+        <van-uploader
+          :before-read="beforeRead"
+          :after-read="changeImgSuccess"
+          :accept="accept"
+          class="upload-btn flex-1 mr-12"
+        >
+          <van-button class="w-100">更换图片</van-button>
+        </van-uploader>
+        <van-button type="primary" class="flex-1" @click="confirm"
+          >编辑完成</van-button
+        >
+      </div>
+      <div class="bg-white flex align-center justify-between p-10" v-else>
         <van-button class="flex-1 mr-12" @click="show = true"
           >查看上传规范</van-button
         >
@@ -56,10 +85,22 @@ import { ref, onMounted, shallowRef, nextTick } from "vue";
 import upload from "./upload.vue";
 import whiteInkUploadRule from "./whiteInkUploadRule.vue";
 import whiteInkSizeError from "./whiteInkSizeError.vue";
-import { Canvas, FabricImage, Pattern, Rect } from "fabric";
-import { loadFabricImage, initImgOptions } from "@/utils/fabricUtil";
+import { Canvas, FabricImage, filters, Rect } from "fabric";
+import { loadFabricImage, initImgOptions, imgFiltersBlack } from "@/utils/fabricUtil";
 
 const props = defineProps({
+  whiteInkUrl: {
+    type: String,
+    default: "",
+  },
+
+  clipPath: {
+    type: Object,
+    default: () => {
+      return {};
+    },
+  },
+
   offsetTop: {
     type: [Number, String],
     default: 60,
@@ -77,6 +118,7 @@ const emits = defineEmits([
   "exitUploadWhiteInk",
   "showUploadRule",
   "uploadImgSuccess",
+  "setWhiteInkImg",
 ]);
 
 const containerRef = ref(null);
@@ -89,10 +131,19 @@ const accept = ref("image/png");
 const show = ref(false);
 const whiteInkInfo = ref({});
 const showWhiteInkError = ref(false);
-const isUplaodSuccess = ref(false);
+const isShowCanvas = ref(false);
 
 onMounted(() => {
   uploadW.value = containerRef.value.clientWidth;
+
+  if (props.whiteInkUrl) {
+    console.log("🚀 ~ onMounted ~ props.whiteInkUrl:", props.whiteInkUrl);
+    isShowCanvas.value = true;
+    let timer = setTimeout(() => {
+      clearTimeout(timer);
+      initCanvas(props.whiteInkUrl);
+    }, 0);
+  }
 });
 
 const getBottomBoxH = (e) => {
@@ -130,13 +181,14 @@ const beforeRead = async (file) => {
 };
 
 const uploadImgSuccess = (e) => {
-  isUplaodSuccess.value = true;
+  isShowCanvas.value = true;
   nextTick(() => {
     initCanvas(e.objectUrl);
   });
 };
 
 const initCanvas = async (src) => {
+  console.log("🚀 ~ initCanvas ~ src:", src);
   canvas.value = new Canvas(canvasRef.value, {
     preserveObjectStacking: true,
     selection: false,
@@ -145,58 +197,102 @@ const initCanvas = async (src) => {
     width: canvasSize.value.w,
     height: canvasSize.value.h,
   });
-  createGrid();
-  paintImg(src);
-  canvas.value.renderAll();
+  const { left, top, angle, scaleX, scaleY } = props.mainImgInfo.fabricImage;
+  console.log(left, top, angle, scaleX, scaleY);
+  paintImg("/src/assets/images/grid-bg.png");
+  paintImg(src, {
+    id: "whiteInkImg",
+    left,
+    top,
+    angle,
+    scaleX,
+    scaleY,
+  });
+  canvas.value.requestRenderAll();
   console.log("🚀 ~ initCanvas ~ canvas.value:", canvas.value);
 };
 
-const paintImg = async (src) => {
+const paintImg = async (src, options = {}) => {
   const fabricImage = await loadFabricImage(src, {
     left: 0,
     top: props.offsetTop,
+    clipPath: clipRect(),
     selectable: false,
     evented: false,
   });
   initImgOptions(fabricImage, {
     width: canvas.value.width,
     offsetTop: props.offsetTop,
-  });
+  }, options);
+  if (fabricImage.id === "whiteInkImg") imgFiltersBlack(fabricImage);
   canvas.value.add(fabricImage);
 };
 
-const createGrid = () => {
-  // 创建网格图案
-  const pattern = generatePattern();
-  const { w, h } = props.mainImgInfo
-  const grid = new Rect({
+// const imgFilters = async (fabricImage) => {
+//   const matrix = [
+//     0,
+//     0,
+//     0,
+//     0,
+//     0, // R
+//     0,
+//     0,
+//     0,
+//     0,
+//     0, // G
+//     0,
+//     0,
+//     0,
+//     0,
+//     0, // B
+//     0,
+//     0,
+//     0,
+//     1,
+//     0, // A
+//   ];
+//   const colorMatrix = new filters.ColorMatrix({
+//     matrix,
+//   });
+//   // const brightness = new filters.Brightness({
+//   //   brightness: -1,
+//   // });
+//   fabricImage.filters.push(colorMatrix);
+//   fabricImage.applyFilters();
+// };
+
+const clipRect = () => {
+  const { w, h } = props.clipPath;
+  console.log("🚀 ~ clipRect ~ props.clipPath:", props.clipPath);
+  const rect = new Rect({
     width: w,
     height: h,
-    fill: pattern,
-    selectable: false,
-    evented: false,
-    excludeFromExport: true,
-    objectCaching: false,
+    left: (w - canvas.value.width) / 2,
+    top: props.offsetTop,
+    absolutePositioned: true,
   });
-
-  canvas.value.add(grid);
+  return rect;
 };
 
-const generatePattern = () => {
-  const size = 28;
-  const { w, h } = props.mainImgInfo
+const clear = () => {
+  whiteInkInfo.value = {};
+  canvas.value.clear();
+  isShowCanvas.value = false;
+};
 
-  const ctx = canvas.value.getContext("2d");
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, w, h);
+const changeImgSuccess = (e) => {
+  canvas.value.forEachObject(async (obj) => {
+    if (obj.id === "whiteInkImg") {
+      await obj.setSrc(e.objectUrl);
+      canvas.value.requestRenderAll();
+      whiteInkInfo.value = await getImgInfo(e.objectUrl);
+    }
+  });
+};
 
-  ctx.fillStyle = "#ddd";
-  ctx.fillRect(0, 0, size, size);
-  ctx.fillRect(size, size, size, size);
-
-  return new Pattern({
-    source: canvasRef.value,
-    repeat: "repeat",
+const confirm = () => {
+  emits("setWhiteInkImg", {
+    ...whiteInkInfo.value
   });
 };
 </script>
