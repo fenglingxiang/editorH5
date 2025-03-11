@@ -9,7 +9,7 @@
           class="clear-item border-item flex-column align-center justify-center"
           @click="clearBorder"
         >
-          <van-icon name="/src/assets/images/clear-icon.png" size="40" />
+          <van-icon :name="clearIcon" size="40" />
           <div>清空</div>
         </div>
         <div
@@ -38,12 +38,14 @@
 <script setup>
 import { onMounted, ref } from "vue";
 import allBorder from "./allBorder.vue";
+import clearIcon from "@/assets/images/clear-icon.png";
+import borderImg from "@/assets/images/border.png";
 
 const emits = defineEmits(["clearBorder", "changeBorder"]);
 
 const borderList = ref([
   {
-    img: "/src/assets/images/border.png",
+    img: borderImg,
   },
 ]);
 const curBorder = ref(-1);

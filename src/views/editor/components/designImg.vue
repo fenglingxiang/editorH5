@@ -13,7 +13,7 @@
         >保存</van-button
       >
       <van-button
-        icon="/src/assets/images/exit-icon.png"
+        :icon="exitIcon"
         type="primary"
         size="small"
         class="save-button"
@@ -53,10 +53,7 @@
               ]"
               @click="toolHandle(item.type)"
             >
-              <van-icon
-                :name="'/src/assets/images/' + item.icon + '.png'"
-                size="19px"
-              />
+              <van-icon :name="item.icon" size="19px" />
               <div class="mt-2">{{ item.name }}</div>
             </div>
           </van-uploader>
@@ -79,10 +76,7 @@
             :key="item.type"
             @click="bottomToolToggle(item.type)"
           >
-            <van-icon
-              :name="'/src/assets/images/' + item.icon + '.png'"
-              size="20px"
-            />
+            <van-icon :name="item.icon" size="20px" />
             <div class="mt-2">{{ item.name }}</div>
           </div>
         </div>
@@ -117,6 +111,16 @@
 import { ref, shallowRef, watch } from "vue";
 import { Canvas, Circle, Rect, Point } from "fabric";
 import * as fabric from "fabric";
+import exitIcon from "@/assets/images/exit-icon.png";
+import editorIcon from "@/assets/images/editor-icon.png";
+import changeIcon from "@/assets/images/change-icon.png";
+import picIcon from "@/assets/images/pic-icon.png";
+import maskIcon from "@/assets/images/mask-icon.png";
+import borderIcon from "@/assets/images/border-icon.png";
+import editorHandleIcon1 from "@/assets/images/editor-handle-icon1.png";
+import editorHandleIcon2 from "@/assets/images/editor-handle-icon2.png";
+import rotateIconImg from "@/assets/images/rotate-icon.png";
+import editorImgMaskRed from "@/assets/images/editor-img-mask-red.png";
 import {
   loadFabricImage,
   initImgOptions,
@@ -126,17 +130,25 @@ import {
 import notFillDialog from "./notFillDialog.vue";
 import exitDialog from "./exitDialog.vue";
 import borderTools from "./borderTools.vue";
-import { getImgInfo } from "@/utils/util";
-
-const mainImgInfo = defineModel("mainImgInfo", {
-  type: Object,
-  default: () => {
-    return {};
-  },
-});
+import { getImgInfo, base64ToFile } from "@/utils/util";
 
 const props = defineProps({
   clipPath: {
+    type: Object,
+    default: () => {
+      return {};
+    },
+  },
+
+  //编辑用到的数据
+  jsonData: {
+    type: Object,
+    default: () => {
+      return {};
+    },
+  },
+
+  mainImgInfo: {
     type: Object,
     default: () => {
       return {};
@@ -152,7 +164,7 @@ const props = defineProps({
 
   maskUrl: {
     type: String,
-    default: "/src/assets/images/editor-img-mask-red.png",
+    default: editorImgMaskRed,
   },
 
   offsetTop: {
@@ -164,14 +176,21 @@ const props = defineProps({
     type: String,
     default: "image/png, image/jpg, image/jpeg",
   },
+
+  isRenderWhiteInk: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emits = defineEmits([
   "getDesignBottomBoxH",
   "changeImgSuccess",
+  "updateMainImgInfo",
+  "updateWhiteInkImgInfo",
   "showUploadWhiteInk",
   "clearWhiteInkImg",
-  "saveImg"
+  "saveImg",
 ]);
 
 const buttonRef = ref(null);
@@ -182,29 +201,29 @@ const canvas = shallowRef(null);
 const historyCanvasJsonData = ref("");
 const imgTools = ref([
   {
-    icon: "editor-icon",
+    icon: editorIcon,
     name: "编辑",
     type: "edit",
   },
   {
-    icon: "change-icon",
+    icon: changeIcon,
     name: "替换",
     type: "change",
   },
 ]);
 const bottomTools = ref([
   {
-    icon: "pic-icon",
+    icon: picIcon,
     name: "编辑图片",
     type: "img",
   },
   {
-    icon: "border-icon",
+    icon: borderIcon,
     name: "选择边框",
     type: "border",
   },
   {
-    icon: "mask-icon",
+    icon: maskIcon,
     name: "调整白墨",
     type: "whiteInk",
   },
@@ -219,8 +238,23 @@ watch(
   () => props.whiteInkInfo,
   async (newVal) => {
     console.log("🚀 ~ designImg ~ watch ~ whiteInkInfo:", newVal);
-    const { left, top, angle, scaleX, scaleY } = mainImgInfo.value.fabricImage;
-    const whiteInkImg = await paintImg(
+    let mainImg;
+    let whiteInkImg;
+    //同步更新白墨层transform
+    canvas.value.forEachObject((obj) => {
+      if (obj.id === "mainImg") {
+        mainImg = obj;
+      }
+
+      if (obj.id === "whiteInkImg") {
+        whiteInkImg = obj;
+      }
+    });
+    if (!mainImg) return;
+    const { left, top, angle, scaleX, scaleY } = mainImg;
+    console.log("🚀 ~ designImg ~ watch ~ mainImg:", mainImg);
+    if (whiteInkImg) canvas.value.remove(whiteInkImg);
+    whiteInkImg = await paintImg(
       newVal.url,
       {
         id: "whiteInkImg",
@@ -236,30 +270,44 @@ watch(
         top: props.offsetTop,
       }
     );
+
+    // mainImg.on("rotating", (e) => {
+    //   const { scaleX, scaleY, left, top, angle } = e.transform.target;
+    //   updateTransform(whiteInkImg, { scaleX, scaleY, left, top, angle });
+    // });
+
+    // mainImg.on("scaling", (e) => {
+    //   const { scaleX, scaleY, left, top, angle } = e.transform.target;
+    //   updateTransform(whiteInkImg, { scaleX, scaleY, left, top, angle });
+    // });
+
+    // mainImg.on("moving", (e) => {
+    //   const { scaleX, scaleY, left, top, angle } = e.transform.target;
+    //   updateTransform(whiteInkImg, { scaleX, scaleY, left, top, angle });
+    // });
+    onTransform(mainImg, whiteInkImg);
     imgFiltersBlack(whiteInkImg);
     moveLayer(whiteInkImg, 0);
-
-    //同步更新白墨层transform
-    canvas.value.forEachObject((obj) => {
-      if (obj.id === "mainImg") {
-        obj.on("rotating", (e) => {
-          const { scaleX, scaleY, left, top, angle } = e.transform.target;
-          updateTransform(whiteInkImg, { scaleX, scaleY, left, top, angle });
-        });
-
-        obj.on("scaling", (e) => {
-          const { scaleX, scaleY, left, top, angle } = e.transform.target;
-          updateTransform(whiteInkImg, { scaleX, scaleY, left, top, angle });
-        });
-
-        obj.on("moving", (e) => {
-          const { scaleX, scaleY, left, top, angle } = e.transform.target;
-          updateTransform(whiteInkImg, { scaleX, scaleY, left, top, angle });
-        });
-      }
-    });
+    console.log("🚀 ~ designImg ~ watch ~ canvas:", canvas.value);
   }
 );
+
+const onTransform = (img1, img2) => {
+  img1.on("rotating", (e) => {
+    const { scaleX, scaleY, left, top, angle } = e.transform.target;
+    updateTransform(img2, { scaleX, scaleY, left, top, angle });
+  });
+
+  img1.on("scaling", (e) => {
+    const { scaleX, scaleY, left, top, angle } = e.transform.target;
+    updateTransform(img2, { scaleX, scaleY, left, top, angle });
+  });
+
+  img1.on("moving", (e) => {
+    const { scaleX, scaleY, left, top, angle } = e.transform.target;
+    updateTransform(img2, { scaleX, scaleY, left, top, angle });
+  });
+};
 
 const updateTransform = (target, options = {}) => {
   target.set({
@@ -338,7 +386,7 @@ const init = async () => {
     height: canvasSize.value.h,
   });
   const mainImg = await paintImg(
-    mainImgInfo.value.url,
+    props.mainImgInfo.url,
     {
       selectable: false,
       id: "mainImg",
@@ -348,7 +396,11 @@ const init = async () => {
       top: props.offsetTop,
     }
   );
-  mainImgInfo.value.fabricImage = mainImg;
+  updateMainImgInfo({
+    ...props.mainImgInfo,
+    fabricImage: mainImg,
+  });
+
   const maskImg = await paintImg(props.maskUrl, {
     left: 0,
     top: props.offsetTop,
@@ -375,9 +427,9 @@ const customControls = (fabricObject, options = {}) => {
     ...options,
   });
   if (fabricObject.type === "image") {
-    const reserveIcon = "/src/assets/images/editor-handle-icon1.png";
-    const transformIcon = "/src/assets/images/editor-handle-icon2.png";
-    const rotateIcon = "/src/assets/images/rotate-icon.png";
+    const reserveIcon = editorHandleIcon1;
+    const transformIcon = editorHandleIcon2;
+    const rotateIcon = rotateIconImg;
     // 左上角镜像按钮
     renderControlIcon(fabricObject, reserveIcon, "tl", {
       cornerSize: 28,
@@ -409,12 +461,78 @@ const customControls = (fabricObject, options = {}) => {
   }
 };
 
-const getBottomBoxH = (e) => {
+const getBottomBoxH = async (e) => {
   canvasSize.value = {
     w: canvasBox.value.clientWidth,
     h: canvasBox.value.clientHeight - buttonRef.value.clientHeight - e.h,
   };
-  init();
+  if (!Object.keys(props.jsonData).length) init();
+  else {
+    canvas.value = new Canvas(canvasRef.value, {
+      preserveObjectStacking: true,
+      selection: false,
+    });
+    canvas.value.setDimensions({
+      width: canvasSize.value.w,
+      height: canvasSize.value.h,
+    });
+    let maskImg;
+    let mainImg;
+    let whiteInkImg;
+    canvas.value = await canvas.value.loadFromJSON(
+      props.jsonData,
+      (obj, ins) => {
+        customControls(ins, {
+          selectable: false,
+          evented: false,
+        });
+        if (ins.id === "mainImg") {
+          mainImg = ins;
+          updateMainImgInfo({
+            url: obj.src,
+            w: obj.width,
+            h: obj.height,
+            fabricImage: ins,
+          });
+        }
+        if (ins.id === "whiteInkImg") {
+          whiteInkImg = ins;
+          emits("updateWhiteInkImgInfo", {
+            url: obj.src,
+            w: obj.width,
+            h: obj.height,
+          });
+        }
+        if (ins.id === "maskImg") {
+          maskImg = ins;
+        }
+      }
+    );
+    canvas.value.on("mouse:up", (e) => {
+      let flag = maskImg.containsPoint(e.pointer); //判断点击点是否在maskImg内部
+      if (!isEdit.value && flag && bottomToolsMode.value === "img") {
+        editStart();
+      }
+    });
+    onTransform(mainImg, whiteInkImg);
+    // mainImg.on("rotating", (e) => {
+    //   const { scaleX, scaleY, left, top, angle } = e.transform.target;
+    //   updateTransform(whiteInkImg, { scaleX, scaleY, left, top, angle });
+    // });
+
+    // mainImg.on("scaling", (e) => {
+    //   const { scaleX, scaleY, left, top, angle } = e.transform.target;
+    //   updateTransform(whiteInkImg, { scaleX, scaleY, left, top, angle });
+    // });
+
+    // mainImg.on("moving", (e) => {
+    //   const { scaleX, scaleY, left, top, angle } = e.transform.target;
+    //   updateTransform(whiteInkImg, { scaleX, scaleY, left, top, angle });
+    // });
+
+    canvas.value.requestRenderAll();
+    isEdit.value = false;
+  }
 };
 
 const bottomToolToggle = (e) => {
@@ -467,8 +585,11 @@ const changeImgSuccess = (e) => {
         offsetTop: props.offsetTop,
       });
       canvas.value.requestRenderAll();
-      mainImgInfo.value = await getImgInfo(e.objectUrl);
-      mainImgInfo.value.fabricImage = obj;
+      const info = await getImgInfo(e.objectUrl);
+      updateMainImgInfo({
+        ...info,
+        fabricImage: obj,
+      });
     }
     //更换图片需要移除白墨图
     if (obj.id === "whiteInkImg") {
@@ -477,6 +598,10 @@ const changeImgSuccess = (e) => {
       emits("clearWhiteInkImg");
     }
   });
+};
+
+const updateMainImgInfo = (e) => {
+  emits("updateMainImgInfo", e);
 };
 
 //编辑完成
@@ -539,6 +664,8 @@ const toFill = () => {
 
 //退出编辑
 const editExit = async () => {
+  let mainImg
+  let whiteInkImg
   canvas.value = await canvas.value.loadFromJSON(
     historyCanvasJsonData.value,
     (obj, ins) => {
@@ -547,15 +674,20 @@ const editExit = async () => {
         evented: false,
       });
       if (ins.id === "mainImg") {
-        mainImgInfo.value = {
+        mainImg = ins
+        updateMainImgInfo({
           url: obj.src,
           w: obj.width,
           h: obj.height,
-          fabricImg: ins,
-        };
+          fabricImage: ins,
+        });
+      }
+      if(ins.id === "whiteInkImg") {
+        whiteInkImg = ins
       }
     }
   );
+  onTransform(mainImg, whiteInkImg);
   canvas.value.requestRenderAll();
   isEdit.value = false;
 };
@@ -611,9 +743,13 @@ const moveLayer = (target, index) => {
 
 const saveImg = () => {
   let clipPath;
+  let whiteInkImg;
   canvas.value.forEachObject((obj) => {
     if (obj.id === "mainImg") {
       clipPath = obj.clipPath;
+    }
+    if (obj.id === "whiteInkImg") {
+      whiteInkImg = obj;
     }
   });
   let options = {
@@ -631,8 +767,21 @@ const saveImg = () => {
     };
   }
   const res = canvas.value.toDataURL({ ...options });
-  console.log("🚀 ~ saveImg ~ res:", res);
-  emits("saveImg")
+  const jsonData = canvas.value.toObject(["id"]);
+  // window.localStorage.setItem("jsonData", JSON.stringify(jsonData));
+  const whiteInkImgRes = whiteInkImg
+    ? canvas.value.toDataURL({
+        ...options,
+        filter: (obj) => obj.id === "whiteInkImg",
+      })
+    : "";
+  emits("saveImg", {
+    img: base64ToFile(res, `${new Date().getTime()}-product.png`),
+    jsonData,
+    whiteInkImg: whiteInkImgRes
+      ? base64ToFile(whiteInkImgRes, `${new Date().getTime()}-white-ink.png`)
+      : "",
+  });
 };
 </script>
 

@@ -11,6 +11,8 @@ import { VantResolver } from '@vant/auto-import-resolver';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
+    // base: env.VITE_BASE_URL,
+    base: "/",
     plugins: [
       vue(),
       // vueDevTools(),
@@ -64,8 +66,7 @@ export default defineConfig(({ mode }) => {
            * 2. 如果你不想自定义 chunk 分割策略，可以直接移除这段配置
            */
           manualChunks: {
-            vue: ["vue", "vue-router", "pinia"],
-            element: ["element-plus", "@element-plus/icons-vue"]
+            vue: ["vue", "vue-router"],
           },
           chunkFileNames: "static/js/[name]-[hash].js", // 引入文件名的名称
           entryFileNames: "static/js/[name]-[hash].js", // 包的入口文件名称

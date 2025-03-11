@@ -33,6 +33,7 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import upload from "./upload.vue";
+import { upload as uploadOss } from "@/utils/upload";
 
 const props = defineProps({
   offsetTop: {
@@ -69,12 +70,16 @@ const beforeRead = (file) => {
   });
 };
 
-const uploadImgSuccess = (e) => {
+const uploadImgSuccess = async (e) => {
   console.log("🚀 ~ uploadImgSuccess ~ e:", e);
-  emits("uploadImgSuccess", {
-    img: e.objectUrl,
-  });
+  let url = ""
+  url = e.file ? await uploadOssReq(e.file) : e.oosUrl
+  emits("uploadImgSuccess", e);
 };
+
+const uploadOssReq = (file) => {
+  return uploadOss(file)
+}
 </script>
 
 <style lang="scss" scoped>

@@ -7,7 +7,7 @@
   >
     <div class="flex align-center justify-center" style="width: 100px; height: 100px;">
       <van-image
-        src="/src/assets/images/loading-icon.png"
+        :src="loadingIcon"
         width="48px"
         height="48px"
         class="loading-icon"
@@ -18,6 +18,7 @@
 
 <script setup>
 import { ref } from "vue";
+import loadingIcon from "@/assets/images/loading-icon.png";
 const show = ref(true);
 </script>
 

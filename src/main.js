@@ -1,5 +1,5 @@
 import "normalize.css"
-import './assets/styles/main.scss'
+import '@/assets/styles/main.scss'
 // 注册components里面的全部组件
 import installComponents from "@/plugins/installComponents"
 

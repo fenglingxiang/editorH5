@@ -2,7 +2,7 @@
   <div class="relative h-100" ref="containerRef">
     <div ref="buttonRef">
       <van-button
-        icon="/src/assets/images/exit-icon.png"
+        :icon="exitIcon"
         type="primary"
         size="small"
         class="save-button"
@@ -13,7 +13,7 @@
     <div class="relative" v-if="isShowCanvas">
       <canvas ref="canvasRef"></canvas>
       <van-button
-        icon="/src/assets/images/clear2-icon.png"
+        :icon="clear2Icon"
         class="absolute"
         :style="{
           top: clipPath.h + offsetTop + 20 + 'px',
@@ -80,13 +80,21 @@
 </template>
 
 <script setup>
-import { getImgInfo } from "@/utils/util";
-import { ref, onMounted, shallowRef, nextTick } from "vue";
+import { getImgInfo, base64ToFile } from "@/utils/util";
+import { ref, onMounted, shallowRef, nextTick, watch } from "vue";
+import exitIcon from "@/assets/images/exit-icon.png";
+import clear2Icon from "@/assets/images/clear2-icon.png";
+import gridBgImg from "@/assets/images/grid-bg.png";
 import upload from "./upload.vue";
 import whiteInkUploadRule from "./whiteInkUploadRule.vue";
 import whiteInkSizeError from "./whiteInkSizeError.vue";
-import { Canvas, FabricImage, filters, Rect } from "fabric";
-import { loadFabricImage, initImgOptions, imgFiltersBlack } from "@/utils/fabricUtil";
+import { Canvas, Rect } from "fabric";
+import {
+  loadFabricImage,
+  initImgOptions,
+  imgFiltersBlack,
+} from "@/utils/fabricUtil";
+import { upload as uploadOss } from "@/utils/upload";
 
 const props = defineProps({
   whiteInkUrl: {
@@ -135,12 +143,12 @@ const isShowCanvas = ref(false);
 
 onMounted(() => {
   uploadW.value = containerRef.value.clientWidth;
-
   if (props.whiteInkUrl) {
     console.log("🚀 ~ onMounted ~ props.whiteInkUrl:", props.whiteInkUrl);
     isShowCanvas.value = true;
-    let timer = setTimeout(() => {
+    let timer = setTimeout(async () => {
       clearTimeout(timer);
+      whiteInkInfo.value = await getImgInfo(props.whiteInkUrl);
       initCanvas(props.whiteInkUrl);
     }, 0);
   }
@@ -148,12 +156,6 @@ onMounted(() => {
 
 const getBottomBoxH = (e) => {
   nextTick(() => {
-    console.log(
-      "🚀 ~ getBottomBoxH ~ containerRef.value:",
-      containerRef.value.clientHeight,
-      buttonRef.value.clientHeight,
-      e.h
-    );
     canvasSize.value = {
       w: containerRef.value.clientWidth,
       h: containerRef.value.clientHeight - buttonRef.value.clientHeight - e.h,
@@ -180,11 +182,17 @@ const beforeRead = async (file) => {
   });
 };
 
-const uploadImgSuccess = (e) => {
+const uploadImgSuccess = async (e) => {
+  let url = "";
+  url = e.file ? await uploadOssReq(e.file) : e.oosUrl;
   isShowCanvas.value = true;
   nextTick(() => {
-    initCanvas(e.objectUrl);
+    initCanvas(url);
   });
+};
+
+const uploadOssReq = (file) => {
+  return uploadOss(file);
 };
 
 const initCanvas = async (src) => {
@@ -198,8 +206,7 @@ const initCanvas = async (src) => {
     height: canvasSize.value.h,
   });
   const { left, top, angle, scaleX, scaleY } = props.mainImgInfo.fabricImage;
-  console.log(left, top, angle, scaleX, scaleY);
-  paintImg("/src/assets/images/grid-bg.png");
+  paintImg(gridBgImg);
   paintImg(src, {
     id: "whiteInkImg",
     left,
@@ -220,10 +227,14 @@ const paintImg = async (src, options = {}) => {
     selectable: false,
     evented: false,
   });
-  initImgOptions(fabricImage, {
-    width: canvas.value.width,
-    offsetTop: props.offsetTop,
-  }, options);
+  initImgOptions(
+    fabricImage,
+    {
+      width: canvas.value.width,
+      offsetTop: props.offsetTop,
+    },
+    options
+  );
   if (fabricImage.id === "whiteInkImg") imgFiltersBlack(fabricImage);
   canvas.value.add(fabricImage);
 };
@@ -285,14 +296,42 @@ const changeImgSuccess = (e) => {
     if (obj.id === "whiteInkImg") {
       await obj.setSrc(e.objectUrl);
       canvas.value.requestRenderAll();
-      whiteInkInfo.value = await getImgInfo(e.objectUrl);
+      whiteInkInfo.value = await getImgInfo(e.file);
     }
   });
 };
 
-const confirm = () => {
+const confirm = async () => {
+  // let clipPath;
+  // canvas.value.forEachObject((obj) => {
+  //   if (obj.id === "whiteInkImg") {
+  //     clipPath = obj.clipPath;
+  //   }
+  // });
+  // let options = {
+  //   format: "png",
+  //   quality: 1,
+  //   filter: (obj) => obj.id == "whiteInkImg",
+  // };
+  // if (clipPath) {
+  //   options = {
+  //     ...options,
+  //     left: clipPath.left,
+  //     top: clipPath.top,
+  //     width: clipPath.width,
+  //     height: clipPath.height,
+  //   };
+  // }
+
+  // const res = canvas.value.toDataURL({
+  //   ...options,
+  // });
+  // const file = base64ToFile(res, `${new Date().getTime()}-white-ink.png`);
+  // const ossRes = await uploadOssReq(file)
+  console.log("🚀 ~ confirm ~ whiteInkInfo.value:", whiteInkInfo.value);
   emits("setWhiteInkImg", {
-    ...whiteInkInfo.value
+    ...whiteInkInfo.value,
+    // url: ossRes.oosUrl
   });
 };
 </script>

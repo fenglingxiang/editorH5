@@ -43,5 +43,6 @@ onMounted(() => {
   bottom: 0;
   left: 0;
   padding-bottom: env(safe-area-inset-bottom);
+  background-color: #fff;
 }
 </style>

@@ -2,7 +2,7 @@
   <v-popup v-model:show="show" width="335px">
     <div>
       <van-image
-        src="/src/assets/images/explain.png"
+        :src="explainImg"
         width="295px"
         height="84px"
       />
@@ -16,6 +16,7 @@
 </template>
 
 <script setup>
+import explainImg from "@/assets/images/explain.png";
 const show = defineModel("show", {
   type: Boolean,
   default: false,

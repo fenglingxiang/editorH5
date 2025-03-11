@@ -30,6 +30,7 @@
 </template>
 
 <script setup>
+import { upload } from '@/utils/upload';
 const props = defineProps({
   size: {
     type: [Number, String],
@@ -71,7 +72,9 @@ const emits = defineEmits(["uploadImgSuccess"]);
 
 const uploadImgSuccess = (e) => {
   console.log("🚀 ~ uploadImgSuccess ~ e:", e)
-  emits("uploadImgSuccess", e);
+  upload(e.file).then(res => {
+    emits("uploadImgSuccess", res);
+  })
 };
 </script>
 

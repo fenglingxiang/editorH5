@@ -4,7 +4,7 @@
       <div class="flex-column align-center">
         <div class="fs-16 fw-700">实物偏移为正常现象</div>
         <div class="flex align-center mt-6">
-          <van-icon name="/src/assets/images/warn-icon.png" size="20" />
+          <van-icon :name="warnIcon" size="20" />
           <div>均不在售后范围内！</div>
         </div>
       </div>
@@ -33,6 +33,7 @@
 
 <script setup>
 import { ref } from "vue";
+import warnIcon from "@/assets/images/warn-icon.png";
 
 const show = defineModel("show", {
   type: Boolean,

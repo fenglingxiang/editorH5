@@ -4,8 +4,8 @@
     :position="position"
     :close-on-click-overlay="closeOnClickOverlay"
     :round="round"
-    :safe-area-inset-top="safeAreaInsetTop"
-    :safe-area-inset-bottom="safeAreaInsetBottom"
+    :safe-area-inset-top="position === 'top'"
+    :safe-area-inset-bottom="position === 'bottom'"
     style="--van-popup-round-radius: 10px"
   >
     <div
@@ -85,7 +85,7 @@ const props = defineProps({
 
   safeAreaInsetBottom: {
     type: Boolean,
-    default: true,
+    default: false,
   },
 
   padding: {
